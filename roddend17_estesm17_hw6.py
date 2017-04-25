@@ -103,3 +103,7 @@ class AIPlayer(Player):
     def loadFile(self):
         with open(self.filePath, "rb") as file:
             self.stateList = pickle.load(file)
+
+    def saveFile(self):
+        with open("AI/" + self.filePath, "wb") as file:
+            pickle.dump(self.stateList, file, 0)
