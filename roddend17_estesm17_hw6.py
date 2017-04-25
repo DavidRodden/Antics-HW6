@@ -29,7 +29,7 @@ class AIPlayer(Player):
         try:
             self.loadFile()
         except IOError:
-            print "Util file nonexistant"
+            print "File nonexistent, starting from zero"
         # Call upon super to set the AI name
         super(AIPlayer, self).__init__(inputPlayerId, "TD Learner")
 
@@ -84,6 +84,11 @@ class AIPlayer(Player):
         return consolidated
 
     def getMove(self, currentState):
+        """
+        Gets the next move from Player
+        :param currentState: current state passed used to return the move to take
+        :return: move to take
+        """
         self.addStateList(currentState)
         return self.greatestState(currentState)
 
