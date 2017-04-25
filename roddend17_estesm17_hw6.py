@@ -76,6 +76,27 @@ class AIPlayer(Player):
                         consolidated.append([approxDist(self, grape)])
         return consolidated
 
+    def addStateList(self, state, next):
+        actualStates = ""
+        for lines in self.consolidate(state):
+            for line in lines:
+                actualStates += str(line)
+        if next is None and actualStates not in self.stateList:
+            self.stateList[actualStates] = 0
+            self.encountered += 1
+            return self.stateList[actualStates]
+        nextStates = ""
+        for lines in self.consolidate(next):
+            for line in lines:
+                nextStates += str(line)
+        if nextStates not in self.stateList:
+            self.stateList[nextStates] = 0
+            self.encountered += 1
+            return self.stateList[nextStates]
+        self.stateList[actualStates] += (self.reward(actualStates) - self.stateList[actualStates] + self.stateList[
+            nextStates] * .92) * self.alpha
+        return self.stateList[actualStates]
+
     def reward(self, consolidated):
         return 1.0 if "S" in consolidated else -1.0 if "F" in consolidated else -.01
 
