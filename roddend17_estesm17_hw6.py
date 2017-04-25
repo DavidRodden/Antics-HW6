@@ -13,12 +13,18 @@ class AIPlayer(Player):
     #   inputPlayerId - The id to give the new player (int)
     ##
     def __init__(self, inputPlayerId):
-        self.stateList = {}
-        self.encountered = 0
+        # learning to be used for reward
         self.alpha = .99
-        self.alphaDelta = 3
+        # above alpha's rate of change
+        self.alphaDelta = 5
+        # alpha decrement
         self.alphaChange = .1
+        self.encountered = 0
+        #
         self.discountFactor = .9
+        # states used to eventually save to file in order to learn
+        self.stateList = {}
+        # path at which learning is stored
         self.filePath = "roddend17_estesm17_utilFile.txt"
         try:
             self.loadFile()
@@ -26,7 +32,8 @@ class AIPlayer(Player):
             print "Util file nonexistant"
         super(AIPlayer, self).__init__(inputPlayerId, "Testing")
 
-    def consolidate(self, state):
+    @staticmethod
+    def consolidate(state):
         turn = state.whoseTurn
         my_id = PLAYER_ONE if turn is not None and turn == PLAYER_ONE else PLAYER_TWO
         enemy_id = PLAYER_TWO if turn is not None and turn == PLAYER_TWO else PLAYER_ONE
@@ -97,7 +104,7 @@ class AIPlayer(Player):
             if greatest_value is None or current > greatest_value:
                 greatest_value = current
                 greatest = movement
-        return greatest
+        return legal_moves[random.randint(0, len(legal_moves) - 1)] if random.random() > .9 else greatest
 
     @staticmethod
     def predict(current_state, move):
@@ -111,9 +118,15 @@ class AIPlayer(Player):
             # change ant's coords and hasMoved status
             ant_to_move.coords = (end_coord[0], end_coord[1])
             ant_to_move.hasMoved = True
-
-        # for build moves, determine what was built, then add that to the appropriate list
-
+        elif move.moveType == BUILD:
+            coord_list = move.coordList[0]
+            current_inv = current_state.inventories[current_state.whoseTurn]
+            if move.buildType == TUNNEL:
+                return current_state
+            current_inv.foodCount -= UNIT_STATS[move.buildType][COST]
+            ant = Ant(coord_list, move.buildType, current_state.whoseTurn)
+            ant.hasMoved = True
+            current_state.inventories[current_state.whoseTurn].ants.append(ant)
         return current_state
 
     def getPlacement(self, currentState):
@@ -165,10 +178,11 @@ class AIPlayer(Player):
 
     def registerWin(self, hasWon):
         self.alpha -= self.alphaChange * (1.0 - .99 / math.exp(self.alpha ** self.alphaDelta))
-        self.newStates = 0
+        self.encountered = 0
         self.saveFile()
 
-    def reward(self, consolidated):
+    @staticmethod
+    def reward(consolidated):
         return 1.0 if "Success" in consolidated else -1.0 if "Failure" in consolidated else -.01
 
     def loadFile(self):
