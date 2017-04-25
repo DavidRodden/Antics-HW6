@@ -19,21 +19,27 @@ class AIPlayer(Player):
         self.alphaDelta = 5
         # alpha decrement
         self.alphaChange = .1
+        # amount of states we've stumbled across
         self.encountered = 0
-        #
-        self.discountFactor = .9
         # states used to eventually save to file in order to learn
         self.stateList = {}
         # path at which learning is stored
         self.filePath = "roddend17_estesm17_utilFile.txt"
+        # Attempt to load file if one exists already, otherwise start from zero
         try:
             self.loadFile()
         except IOError:
             print "Util file nonexistant"
-        super(AIPlayer, self).__init__(inputPlayerId, "Testing")
+        # Call upon super to set the AI name
+        super(AIPlayer, self).__init__(inputPlayerId, "TD Learner")
 
     @staticmethod
     def consolidate(state):
+        """
+        Consolidates the given state info to be used as a condensed version
+        :param state:
+        :return: list of lists of the game state
+        """
         turn = state.whoseTurn
         my_id = PLAYER_ONE if turn is not None and turn == PLAYER_ONE else PLAYER_TWO
         enemy_id = PLAYER_TWO if turn is not None and turn == PLAYER_TWO else PLAYER_ONE
@@ -66,14 +72,28 @@ class AIPlayer(Player):
                 if currentAnt.type is not WORKER:
                     continue
                 if currentAnt.carrying:
-                    for struct in my_structs:
-                        consolidated.append(["CARRY", approxDist(currentAnt.coords, struct)])
+                    struct = []
+                    for my_struct in my_structs:
+                        struct.append(approxDist(currentAnt.coords, my_struct))
+                    consolidated.append(["Carry", min(struct)])
                 else:
+                    grapes = []
                     for grape in my_grapes:
-                        consolidated.append([approxDist(currentAnt.coords, grape)])
+                        grapes.append(approxDist(currentAnt.coords, grape))
+                    consolidated.append(["Grape", min(grapes)])
         return consolidated
 
+    def getMove(self, currentState):
+        self.addStateList(currentState)
+        return self.greatestState(currentState)
+
     def addStateList(self, state, following_state=None):
+        """
+        Adds to stateList with regards to the information provided by state and following_state
+        :param state:
+        :param following_state:
+        :return: the recorded actual_state element within stateList
+        """
         actual_states = ""
         for lines in self.consolidate(state):
             for line in lines:
@@ -96,6 +116,11 @@ class AIPlayer(Player):
         return self.stateList[actual_states]
 
     def greatestState(self, state):
+        """
+        To be called after addStateList within getMove to either get the best move or to try a new one
+        :param state:
+        :return: move to be returned within getMove
+        """
         legal_moves = listAllLegalMoves(state)
         greatest = None
         greatest_value = None
@@ -104,21 +129,20 @@ class AIPlayer(Player):
             if greatest_value is None or current > greatest_value:
                 greatest_value = current
                 greatest = movement
-        return legal_moves[random.randint(0, len(legal_moves) - 1)] if random.random() > .9 else greatest
+        return legal_moves[random.randint(0, len(legal_moves) - 1)] if random.random() > .7 else greatest
 
     @staticmethod
     def predict(current_state, move):
+        """
+        Invokes fastclone() on current_state to be altered with regards to the type of movement
+        :param current_state:
+        :param move:
+        :return:
+        """
         current_state = current_state.fastclone()
-        if move.moveType == MOVE_ANT:
-            start_coord = move.coordList[0]
-            end_coord = move.coordList[-1]
-
-            # take ant from start coord
-            ant_to_move = getAntAt(current_state, start_coord)
-            # change ant's coords and hasMoved status
-            ant_to_move.coords = (end_coord[0], end_coord[1])
-            ant_to_move.hasMoved = True
-        elif move.moveType == BUILD:
+        if move.moveType == END:
+            return current_state
+        if move.moveType == BUILD:
             coord_list = move.coordList[0]
             current_inv = current_state.inventories[current_state.whoseTurn]
             if move.buildType == TUNNEL:
@@ -127,6 +151,12 @@ class AIPlayer(Player):
             ant = Ant(coord_list, move.buildType, current_state.whoseTurn)
             ant.hasMoved = True
             current_state.inventories[current_state.whoseTurn].ants.append(ant)
+            return current_state
+        source = move.coordList[0]
+        dest = move.coordList[-1]
+        current = getAntAt(current_state, source)
+        current.coords = (dest[0], dest[1])
+        current.hasMoved = True
         return current_state
 
     def getPlacement(self, currentState):
@@ -169,26 +199,39 @@ class AIPlayer(Player):
         else:
             return [(0, 0)]
 
-    def getMove(self, currentState):
-        self.addStateList(currentState)
-        return self.greatestState(currentState)
-
     def getAttack(self, currentState, attackingAnt, enemyLocations):
         return enemyLocations[random.randint(0, len(enemyLocations) - 1)]
 
     def registerWin(self, hasWon):
+        """
+        Called at the end of the game and a vital part of the learning process
+        Modifies the alpha according to the values set within __init__
+        :param hasWon: whether we have won or not
+        """
         self.alpha -= self.alphaChange * (1.0 - .99 / math.exp(self.alpha ** self.alphaDelta))
         self.encountered = 0
         self.saveFile()
 
     @staticmethod
     def reward(consolidated):
+        """
+        Rewards based on whether "Success" or "Failure" exist in the consolidated state or not
+        :param consolidated: consolidated state to be searched in order to reward
+        :return: 1 for a win, -1 for a loss, and -.1 for neither
+        """
         return 1.0 if "Success" in consolidated else -1.0 if "Failure" in consolidated else -.01
 
     def loadFile(self):
+        """
+        Attempts to load the file containing the path set within __init__ to be used in stateList
+        """
         with open(self.filePath, "rb") as file:
             self.stateList = pickle.load(file)
 
     def saveFile(self):
+        """
+        Saves stateList data to the path set within __init__
+        Creates file if does not exist already
+        """
         with open("AI/" + self.filePath, "wb") as file:
             pickle.dump(self.stateList, file, 0)
